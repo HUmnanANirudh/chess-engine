@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess Engine - AI vs Human</title>
+    <title>Chess Engine</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #2c3e50;
             min-height: 100vh;
             display: flex;
             justify-content: center;
@@ -18,186 +18,285 @@
         .container {
             display: flex;
             gap: 30px;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            background: #ecf0f1;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             padding: 30px;
-            max-width: 1100px;
+            max-width: 1200px;
         }
-        .title { font-size: 28px; font-weight: bold; color: #333; text-align: center; margin-bottom: 20px; }
-        .chessboard {
-            display: grid;
-            grid-template-columns: repeat(8, 60px);
-            grid-template-rows: repeat(8, 60px);
-            gap: 0;
-            border: 3px solid #333;
-            background: #333;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }
-        .square {
-            width: 60px;
-            height: 60px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 40px;
-            cursor: pointer;
-            user-select: none;
-            transition: all 0.2s;
-        }
-        .square.light { background: #f0d9b5; }
-        .square.dark { background: #b58863; }
-        .square:hover { filter: brightness(0.95); }
-        .square.selected { background: #baca44 !important; }
-        .square.highlight { background: #a8d8a8 !important; }
-        .control-panel {
-            width: 300px;
+        .left-panel {
+            width: 240px;
             display: flex;
             flex-direction: column;
             gap: 20px;
+            padding-top: 60px;
+        }
+        .board-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .right-panel {
+            width: 280px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            padding-top: 60px;
+        }
+        .title { 
+            font-size: 24px; 
+            font-weight: 600; 
+            color: #2c3e50;
+            text-align: center; 
+            margin-bottom: 10px;
+        }
+        .chessboard {
+            display: grid;
+            grid-template-columns: repeat(8, 65px);
+            grid-template-rows: repeat(8, 65px);
+            gap: 0;
+            border: 2px solid #34495e;
+            border-radius: 4px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .chessboard.flipped {
+            transform: rotate(180deg);
+        }
+        .chessboard.flipped .square {
+            transform: rotate(180deg);
+        }
+        .square {
+            width: 65px;
+            height: 65px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 44px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .square.light { 
+            background: #f0d9b5;
+        }
+        .square.dark { 
+            background: #b58863;
+        }
+        .square.selected { 
+            background: #f7dc6f !important;
+            box-shadow: inset 0 0 0 3px #f39c12;
+        }
+        .square.highlight { 
+            background: #bae67e !important;
+        }
+        .square.highlight::after {
+            content: '';
+            position: absolute;
+            width: 18px;
+            height: 18px;
+            background: rgba(76, 175, 80, 0.4);
+            border-radius: 50%;
         }
         .panel-section {
-            background: #f8f9fa;
-            border-radius: 10px;
+            background: white;
+            border-radius: 6px;
             padding: 15px;
-            border-left: 4px solid #667eea;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        .panel-title { font-size: 14px; font-weight: bold; color: #333; margin-bottom: 10px; text-transform: uppercase; }
+        button:hover {
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+            transform: translateY(-1px);
+        }
+        .panel-title { 
+            font-size: 12px; 
+            font-weight: 600; 
+            color: #7f8c8d; 
+            margin-bottom: 10px; 
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
         .status-display {
             font-size: 16px;
-            font-weight: bold;
-            color: #667eea;
+            font-weight: 600;
+            color: #2c3e50;
             padding: 15px;
             background: white;
-            border-radius: 8px;
+            border-radius: 6px;
             text-align: center;
-            border: 2px solid #667eea;
+            border: 1px solid #bdc3c7;
+        }
+        .status-display.thinking {
+            animation: pulse 2s ease-in-out infinite;
+            background: #3498db;
+            color: white;
+            border-color: #2980b9;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.85; }
         }
         .move-history {
             background: white;
             border: 1px solid #ddd;
-            border-radius: 6px;
-            padding: 10px;
-            max-height: 120px;
+            border-radius: 4px;
+            padding: 12px;
+            max-height: 140px;
             overflow-y: auto;
             font-size: 13px;
-            font-family: 'Courier New', monospace;
-            color: #333;
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: #2c3e50;
+            line-height: 1.6;
+        }
+        .move-history::-webkit-scrollbar {
+            width: 6px;
+        }
+        .move-history::-webkit-scrollbar-thumb {
+            background: #95a5a6;
+            border-radius: 3px;
         }
         .eval-container {
             display: flex;
-            flex-direction: column;
             align-items: center;
-            gap: 8px;
+            gap: 15px;
+            justify-content: center;
         }
         .eval-bar {
             position: relative;
-            width: 26px;
-            height: 180px;
-            border-radius: 13px;
+            width: 24px;
+            height: 200px;
+            border-radius: 4px;
             overflow: hidden;
-            border: 2px solid #333;
-            background: linear-gradient(to top, #111 0%, #eee 100%);
+            border: 1px solid #34495e;
+            background: #2c3e50;
             display: flex;
             flex-direction: column-reverse;
         }
         .eval-white {
-            background: #f8f9fa;
+            background: #ecf0f1;
             width: 100%;
             height: 50%;
-            transition: height 0.2s ease-out;
+            transition: height 0.3s ease;
         }
         .eval-black {
-            background: #343a40;
+            background: #34495e;
             width: 100%;
             height: 50%;
-            transition: height 0.2s ease-out;
+            transition: height 0.3s ease;
+        }
+        .eval-info {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .eval-score {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2c3e50;
+            text-align: center;
         }
         .eval-labels {
             display: flex;
-            justify-content: space-between;
-            width: 100%;
+            flex-direction: column;
+            gap: 5px;
             font-size: 11px;
-            color: #555;
-        }
-        .eval-labels span {
-            flex: 1;
-            text-align: center;
+            color: #7f8c8d;
         }
         button {
             padding: 12px 20px;
             border: none;
-            border-radius: 6px;
+            border-radius: 4px;
             font-size: 14px;
-            font-weight: bold;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
-            text-transform: uppercase;
         }
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #3498db;
             color: white;
         }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102,126,234,0.4); }
-        .btn-secondary { background: #e9ecef; color: #333; border: 2px solid #ddd; }
-        .btn-secondary:hover { background: #dee2e6; }
         .difficulty-select {
             width: 100%;
             padding: 10px;
-            border: 2px solid #ddd;
-            border-radius: 6px;
+            border: 1px solid #bdc3c7;
+            border-radius: 4px;
             font-size: 14px;
             cursor: pointer;
+            background: white;
+            color: #2c3e50;
         }
-        .button-group { display: flex; flex-direction: column; gap: 10px; }
-        @media (max-width: 1024px) {
-            .container { flex-direction: column; align-items: center; }
-            .control-panel { width: 100%; max-width: 300px; }
+        .difficulty-select:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        @media (max-width: 1100px) {
+            .container { 
+                flex-direction: column-reverse; 
+                align-items: center; 
+                max-width: 650px;
+            }
+            .left-panel { width: 100%; max-width: 600px; }
+            .board-container { order: -1; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div>
-            <div class="title">♟ Chess Engine</div>
-            <div class="chessboard" id="board"></div>
-        </div>
-        <div class="control-panel">
-            <div class="status-display" id="status">White to Move</div>
+        <div class="left-panel">
             <div class="panel-section">
-                <div class="panel-title">Evaluation</div>
+                <div class="panel-title">Play As</div>
+                <select class="difficulty-select" id="playerColor">
+                    <option value="white" selected>White</option>
+                    <option value="black">Black</option>
+                </select>
+            </div>
+
+            <div class="panel-section">
+                <div class="panel-title">Difficulty Level</div>
+                <select class="difficulty-select" id="difficulty">
+                    <option value="1">Beginner (Depth 1)</option>
+                    <option value="2">Easy (Depth 2)</option>
+                    <option value="3" selected>Medium (Depth 3)</option>
+                    <option value="4">Hard (Depth 4)</option>
+                    <option value="5">Expert (Depth 5)</option>
+                </select>
+            </div>
+
+            <div class="panel-section">
+                <div class="panel-title">Position Evaluation</div>
                 <div class="eval-container">
                     <div class="eval-bar">
                         <div class="eval-white" id="evalWhite"></div>
                         <div class="eval-black" id="evalBlack"></div>
                     </div>
-                    <div class="eval-labels">
-                        <span>White</span>
-                        <span id="evalScore">0.0</span>
-                        <span>Black</span>
+                    <div class="eval-info">
+                        <div class="eval-score" id="evalScore">0.0</div>
+                        <div class="eval-labels">
+                            <span>White</span>
+                            <span>Black</span>
+                        </div>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <div class="board-container">
+            <div class="title">Chess Engine</div>
+            <div class="chessboard" id="board"></div>
+        </div>
+
+        <div class="right-panel">
+            <div class="status-display" id="status">White to Move</div>
             <div class="panel-section">
-                <div class="panel-title">Difficulty</div>
-                <select class="difficulty-select" id="difficulty">
-                    <option value="2">Easy</option>
-                    <option value="3">Medium</option>
-                    <option value="4" selected>Hard</option>
-                </select>
+                <div class="panel-title">Move History</div>
+                <div class="move-history" id="moves">Game not started yet.</div>
             </div>
-            <div class="panel-section">
-                <div class="panel-title">Moves</div>
-                <div class="move-history" id="moves"></div>
-            </div>
+            
             <div class="panel-section">
                 <div class="panel-title">Post-Game Analysis</div>
-                <div class="move-history" id="analysis">Play a full game to see move probabilities here.</div>
+                <div class="move-history" id="analysis">Complete a game to see analysis.</div>
             </div>
-            <div class="button-group">
-                <button class="btn-primary" id="newBtn">New Game</button>
-                <button class="btn-secondary" id="undoBtn">Undo</button>
-            </div>
+            
+            <button class="btn-primary" id="newBtn">New Game</button>
         </div>
     </div>
     <script src="chess_game.js"></script>
