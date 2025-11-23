@@ -829,8 +829,6 @@ class Game {
                         tempCastling.blackQueenSide = false;
                     }
                 }
-                
-                // Handle en passant
                 if (pieceType === PIECES.PAWN) {
                     const distance = Math.abs(Math.floor(to / 8) - Math.floor(from / 8));
                     if (distance === 2) {
@@ -851,17 +849,77 @@ class Game {
                 tempPlayer = 1 - tempPlayer;
             }
             
-            const fen = this.boardToFEN(tempBoard, tempPlayer, tempCastling, tempEnPassant);
+            // Get FEN BEFORE human's move
+            const fenBefore = this.boardToFEN(tempBoard, tempPlayer, tempCastling, tempEnPassant);
+            
+            // Now make the human's move to get the position AFTER
+            const humanFrom = this.moves[i][0];
+            const humanTo = this.moves[i][1];
+            const humanPiece = tempBoard[humanFrom];
+            const humanPieceType = humanPiece >> 1;
+            const humanPieceColor = humanPiece & 1;
+            
+            // Handle castling for this move
+            if (humanPieceType === PIECES.KING) {
+                const fromCol = humanFrom % 8;
+                const toCol = humanTo % 8;
+                if (fromCol === 4 && toCol === 6) {
+                    if (humanPieceColor === COLORS.WHITE) {
+                        tempBoard[61] = tempBoard[63];
+                        tempBoard[63] = 0;
+                    } else {
+                        tempBoard[5] = tempBoard[7];
+                        tempBoard[7] = 0;
+                    }
+                } else if (fromCol === 4 && toCol === 2) {
+                    if (humanPieceColor === COLORS.WHITE) {
+                        tempBoard[59] = tempBoard[56];
+                        tempBoard[56] = 0;
+                    } else {
+                        tempBoard[3] = tempBoard[0];
+                        tempBoard[0] = 0;
+                    }
+                }
+                if (humanPieceColor === COLORS.WHITE) {
+                    tempCastling.whiteKingSide = false;
+                    tempCastling.whiteQueenSide = false;
+                } else {
+                    tempCastling.blackKingSide = false;
+                    tempCastling.blackQueenSide = false;
+                }
+            }
+            
+            // Handle en passant for this move
+            if (humanPieceType === PIECES.PAWN) {
+                const distance = Math.abs(Math.floor(humanTo / 8) - Math.floor(humanFrom / 8));
+                if (distance === 2) {
+                    tempEnPassant = humanPieceColor === COLORS.WHITE ? humanTo + 8 : humanTo - 8;
+                } else if (tempEnPassant >= 0 && humanTo === tempEnPassant) {
+                    const captureSquare = humanPieceColor === COLORS.WHITE ? humanTo + 8 : humanTo - 8;
+                    tempBoard[captureSquare] = 0;
+                    tempEnPassant = -1;
+                } else {
+                    tempEnPassant = -1;
+                }
+            } else {
+                tempEnPassant = -1;
+            }
+            
+            tempBoard[humanTo] = tempBoard[humanFrom];
+            tempBoard[humanFrom] = 0;
+            tempPlayer = 1 - tempPlayer;
+            
+            // Get FEN AFTER human's move
+            const fenAfter = this.boardToFEN(tempBoard, tempPlayer, tempCastling, tempEnPassant);
             const humanMove = this.algebraic(this.moves[i][0]) + this.algebraic(this.moves[i][1]);
             
             positionsToAnalyze.push({
                 moveNum: Math.floor(i / 2) + 1,
-                fen: fen,
+                fenBefore: fenBefore,
+                fenAfter: fenAfter,
                 humanMove: humanMove
             });
         }
-
-        // Analyze positions sequentially
         let analysisResults = [];
         let currentIndex = 0;
         let failedRequests = 0;
@@ -877,32 +935,49 @@ class Game {
             }
 
             const pos = positionsToAnalyze[currentIndex];
-            const url = `https://stockfish.online/api/s/v2.php?fen=${encodeURIComponent(pos.fen)}&depth=12`;
+            const urlBefore = `https://stockfish.online/api/s/v2.php?fen=${encodeURIComponent(pos.fenBefore)}&depth=12`;
+            const urlAfter = `https://stockfish.online/api/s/v2.php?fen=${encodeURIComponent(pos.fenAfter)}&depth=12`;
 
-            fetch(url)
+            // Analyze position BEFORE human's move
+            fetch(urlBefore)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
                     return response.json();
                 })
-                .then(data => {
-                    console.log('API response:', data);
-                    if (data.success) {
-                        analysisResults.push({
-                            moveNum: pos.moveNum,
-                            humanMove: pos.humanMove,
-                            eval: data.evaluation,
-                            mate: data.mate,
-                            bestMove: data.bestmove,
-                            continuation: data.continuation
+                .then(dataBefore => {
+                    console.log('API response (before move):', dataBefore);
+                    
+                    // Now analyze position AFTER human's move
+                    return fetch(urlAfter)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            return response.json();
+                        })
+                        .then(dataAfter => {
+                            console.log('API response (after move):', dataAfter);
+                            
+                            if (dataBefore.success && dataAfter.success) {
+                                analysisResults.push({
+                                    moveNum: pos.moveNum,
+                                    humanMove: pos.humanMove,
+                                    evalBefore: dataBefore.evaluation,
+                                    mateBefore: dataBefore.mate,
+                                    evalAfter: dataAfter.evaluation,
+                                    mateAfter: dataAfter.mate,
+                                    bestMove: dataBefore.bestmove,
+                                    continuation: dataBefore.continuation
+                                });
+                            } else {
+                                failedRequests++;
+                                console.warn('API returned success=false for move', pos.moveNum);
+                            }
+                            currentIndex++;
+                            analyzeNext();
                         });
-                    } else {
-                        failedRequests++;
-                        console.warn('API returned success=false for move', pos.moveNum);
-                    }
-                    currentIndex++;
-                    analyzeNext();
                 })
                 .catch(error => {
                     failedRequests++;
@@ -972,50 +1047,56 @@ class Game {
         let html = '<h4 style="margin-bottom: 10px;">Your Move Analysis</h4>';
         html += '<div style="font-size: 12px; line-height: 1.6; max-height: 300px; overflow-y: auto;">';
         
-        let previousEval = null;
-        
         results.forEach((result, index) => {
-            const currentEval = result.mate !== null ? (result.mate > 0 ? 10000 : -10000) : (result.eval || 0);
+            // Convert evaluations to centipawns (from White's perspective)
+            const evalBefore = result.mateBefore !== null 
+                ? (result.mateBefore > 0 ? 10000 : -10000) 
+                : (result.evalBefore || 0);
+            const evalAfter = result.mateAfter !== null 
+                ? (result.mateAfter > 0 ? 10000 : -10000) 
+                : (result.evalAfter || 0);
             
             // Extract best move
             const bestMoveMatch = result.bestMove ? result.bestMove.match(/bestmove\s+(\S+)/) : null;
             const bestMove = bestMoveMatch ? bestMoveMatch[1] : 'N/A';
             
-            // Determine if this was a mistake (reduced winning chances)
+            // Calculate evaluation drop
+            // From White's perspective: if evalAfter < evalBefore, White's position got worse
+            // From Black's perspective: if evalAfter > evalBefore, Black's position got worse
+            // But the API always returns evaluation from White's perspective
+            // So we need to invert for Black
+            const perspective = this.humanColor === COLORS.WHITE ? 1 : -1;
+            const evalChange = (evalAfter - evalBefore) * perspective;
+            
+            // evalChange negative means the position got worse for the human
             let quality = '';
             let color = '#f8f9fa';
             
-            if (previousEval !== null) {
-                const evalDrop = previousEval - currentEval; // Positive means position got worse for White
-                
-                if (evalDrop > 3.0) {
-                    quality = ' - Blunder!';
-                    color = '#ffebee';
-                } else if (evalDrop > 1.5) {
-                    quality = ' - Mistake';
-                    color = '#fff3e0';
-                } else if (evalDrop > 0.5) {
-                    quality = ' - Inaccuracy';
-                    color = '#fffde7';
-                } else if (evalDrop < -0.5) {
-                    quality = ' - Excellent!';
-                    color = '#e8f5e9';
-                } else {
-                    quality = ' - Good';
-                    color = '#f1f8ff';
-                }
+            if (evalChange < -3.0) {
+                quality = ' - Blunder!';
+                color = '#ffebee';
+            } else if (evalChange < -1.5) {
+                quality = ' - Mistake';
+                color = '#fff3e0';
+            } else if (evalChange < -0.5) {
+                quality = ' - Inaccuracy';
+                color = '#fffde7';
+            } else if (evalChange > 0.5) {
+                quality = ' - Excellent!';
+                color = '#e8f5e9';
+            } else {
+                quality = ' - Good';
+                color = '#f1f8ff';
             }
             
-            const evalText = result.mate !== null 
-                ? `Mate in ${Math.abs(result.mate)}` 
-                : `${currentEval > 0 ? '+' : ''}${currentEval.toFixed(1)}`;
+            const evalText = result.mateAfter !== null 
+                ? `Mate in ${Math.abs(result.mateAfter)}` 
+                : `${evalAfter > 0 ? '+' : ''}${evalAfter.toFixed(1)}`;
             
             html += `<div style="margin-bottom: 6px; padding: 8px; background: ${color}; border-radius: 4px; border-left: 3px solid #3498db;">`;
             html += `<strong>Move ${result.moveNum}:</strong> ${result.humanMove}${quality}<br>`;
             html += `<span style="font-size: 11px; color: #555;">Position: ${evalText} | Best was: ${bestMove}</span>`;
             html += `</div>`;
-            
-            previousEval = currentEval;
         });
         
         html += '</div>';
